@@ -1,0 +1,3 @@
+*.sublime-workspace
+vendor
+xv6mount/xv6mount

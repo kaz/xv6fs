@@ -1,0 +1,7 @@
+{
+	"folders":[{"path": "."}],
+	"build_systems": [{
+		"name": "Run xv6mount",
+		"shell_cmd": "cd ${project_path} && make mount"
+	}]
+}
