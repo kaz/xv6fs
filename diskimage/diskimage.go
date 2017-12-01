@@ -2,6 +2,7 @@ package diskimage
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"os"
 )
@@ -52,6 +53,19 @@ func (di *DiskImage) SetInode(n int64, inode *Inode) error {
 	}
 
 	return binary.Write(di.src, binary.LittleEndian, inode)
+}
+func (di *DiskImage) AllocInode() (int64, error) {
+	for i := int64(1); i < int64(di.NInodes); i++ {
+		inode, err := di.GetInode(i)
+		if err != nil {
+			return -1, err
+		}
+
+		if inode.Type == T_UNUSED {
+			return i, nil
+		}
+	}
+	return -1, fmt.Errorf("No inodes left")
 }
 
 func (di *DiskImage) GetBitmap(n int64) (bool, error) {
@@ -108,4 +122,17 @@ func (di *DiskImage) SetData(n int64, data []byte) error {
 
 	_, err = di.src.WriteAt(data, pos)
 	return err
+}
+func (di *DiskImage) AllocData() (int64, error) {
+	for i := di.calcDataStart(); i < int64(di.Size); i++ {
+		used, err := di.GetBitmap(i)
+		if err != nil {
+			return -1, err
+		}
+
+		if !used {
+			return i, nil
+		}
+	}
+	return -1, fmt.Errorf("No data blocks left")
 }

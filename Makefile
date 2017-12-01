@@ -9,7 +9,7 @@ clean:
 
 .PHONY: mount
 mount: xv6mount
-	umount ~/Desktop/xv6fs
+	-umount ~/Desktop/xv6fs
 	./xv6mount/xv6mount fs.img ~/Desktop/xv6fs
 
 xv6mount: **/*.go

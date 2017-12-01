@@ -10,13 +10,13 @@ import (
 	"github.com/hanwen/go-fuse/fuse/pathfs"
 )
 
-type Xv6 struct {
+type xv6fs struct {
 	pathfs.FileSystem
 	root *filesystem.Directory
 }
 
 func Mount(mountPoint string, root *filesystem.Directory) {
-	fs := pathfs.NewPathNodeFs(&Xv6{pathfs.NewDefaultFileSystem(), root}, nil)
+	fs := pathfs.NewPathNodeFs(&xv6fs{pathfs.NewDefaultFileSystem(), root}, nil)
 	server, _, err := nodefs.MountRoot(mountPoint, fs.Root(), nil)
 	if err != nil {
 		panic(err)
@@ -24,7 +24,7 @@ func Mount(mountPoint string, root *filesystem.Directory) {
 	server.Serve()
 }
 
-func (x *Xv6) fetchEntry(name string) filesystem.Entry {
+func (x *xv6fs) fetchEntry(name string) filesystem.Entry {
 	var currentEntry filesystem.Entry = *x.root
 
 	if name == "" {
@@ -54,7 +54,7 @@ func (x *Xv6) fetchEntry(name string) filesystem.Entry {
 	return currentEntry
 }
 
-func (x *Xv6) GetAttr(name string, context *fuse.Context) (*fuse.Attr, fuse.Status) {
+func (x *xv6fs) GetAttr(name string, context *fuse.Context) (*fuse.Attr, fuse.Status) {
 	switch entry := x.fetchEntry(name).(type) {
 
 	case filesystem.File:
@@ -73,7 +73,7 @@ func (x *Xv6) GetAttr(name string, context *fuse.Context) (*fuse.Attr, fuse.Stat
 
 	}
 }
-func (x *Xv6) OpenDir(name string, context *fuse.Context) (c []fuse.DirEntry, code fuse.Status) {
+func (x *xv6fs) OpenDir(name string, context *fuse.Context) (c []fuse.DirEntry, code fuse.Status) {
 	switch entry := x.fetchEntry(name).(type) {
 
 	case filesystem.File:
@@ -105,19 +105,73 @@ func (x *Xv6) OpenDir(name string, context *fuse.Context) (c []fuse.DirEntry, co
 
 	}
 }
-func (x *Xv6) Open(name string, flags uint32, context *fuse.Context) (file nodefs.File, code fuse.Status) {
+func (x *xv6fs) Open(name string, flags uint32, context *fuse.Context) (file nodefs.File, code fuse.Status) {
 	switch entry := x.fetchEntry(name).(type) {
 
 	case filesystem.File:
-		data, err := entry.Read()
+		file, err := NewFile(&entry)
 		if err != nil {
 			return nil, fuse.EIO
 		}
 
-		return nodefs.NewDataFile(data), fuse.OK
+		return file, fuse.OK
 
 	default:
 		return nil, fuse.ENOENT
 
 	}
+}
+func (x *xv6fs) Create(name string, flags uint32, mode uint32, context *fuse.Context) (file nodefs.File, code fuse.Status) {
+	fragments := strings.Split(name, "/")
+
+	switch entry := x.fetchEntry(strings.Join(fragments[:len(fragments)-1], "/")).(type) {
+
+	case filesystem.Directory:
+		rawFile, err := entry.AddFile(fragments[len(fragments)-1])
+		if err != nil {
+			return nil, fuse.EIO
+		}
+
+		file, err := NewFile(rawFile)
+		if err != nil {
+			return nil, fuse.EIO
+		}
+
+		return file, fuse.OK
+
+	default:
+		return nil, fuse.ENOTDIR
+
+	}
+}
+func (x *xv6fs) Unlink(name string, context *fuse.Context) (code fuse.Status) {
+	switch entry := x.fetchEntry(name).(type) {
+
+	case filesystem.File:
+		err := entry.Delete()
+		if err != nil {
+			return fuse.EIO
+		}
+
+	default:
+		return fuse.EIO
+
+	}
+
+	fragments := strings.Split(name, "/")
+
+	switch entry := x.fetchEntry(strings.Join(fragments[:len(fragments)-1], "/")).(type) {
+
+	case filesystem.Directory:
+		err := entry.RemoveEntry(fragments[len(fragments)-1])
+		if err != nil {
+			return fuse.EIO
+		}
+
+	default:
+		return fuse.ENOTDIR
+
+	}
+
+	return fuse.OK
 }

@@ -4,7 +4,8 @@ const (
 	NDIRECT = 12
 )
 const (
-	T_DIR = 1 + iota
+	T_UNUSED = iota
+	T_DIR
 	T_FILE
 	T_DEV
 )
