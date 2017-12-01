@@ -37,7 +37,7 @@ func (sb *SuperBlock) calcBitmapPosition(n int64) (int64, byte, error) {
 	if n >= int64(sb.Size) {
 		return 0, 0, fmt.Errorf("MUST BE: n < %d", sb.Size)
 	}
-	return 512*int64(sb.BmapStart) + n/8, byte(128 >> uint(n%8)), nil
+	return 512*int64(sb.BmapStart) + n/8, 1 << byte(n%8), nil
 }
 
 func (sb *SuperBlock) calcDataStart() int64 {
