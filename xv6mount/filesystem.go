@@ -175,3 +175,21 @@ func (x *xv6fs) Unlink(name string, context *fuse.Context) (code fuse.Status) {
 
 	return fuse.OK
 }
+func (x *xv6fs) Rename(oldName string, newName string, context *fuse.Context) (code fuse.Status) {
+	fragments := strings.Split(oldName, "/")
+
+	switch entry := x.fetchEntry(strings.Join(fragments[:len(fragments)-1], "/")).(type) {
+
+	case filesystem.Directory:
+		err := entry.RenameEntry(fragments[len(fragments)-1], newName)
+		if err != nil {
+			return fuse.EIO
+		}
+
+		return fuse.OK
+
+	default:
+		return fuse.ENOTDIR
+
+	}
+}

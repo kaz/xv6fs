@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"strings"
 
 	"bitbucket.org/sekai/xv6fs/diskimage"
 )
@@ -39,7 +38,7 @@ func (d *Directory) RemoveEntry(name string) error {
 		ent := diskimage.DirEnt{}
 		binary.Read(buffer, binary.LittleEndian, &ent)
 
-		if strings.Trim(string(ent.Name[:]), "\x00") != name {
+		if string(bytes.Trim(ent.Name[:], "\x00")) != name {
 			binary.Write(newBuffer, binary.LittleEndian, &ent)
 		}
 	}
@@ -51,14 +50,66 @@ func (d *Directory) RemoveEntry(name string) error {
 
 	return d.Write(newBuffer)
 }
+func (d *Directory) RenameEntry(oldName string, newName string) error {
+	entries, err := d.Entries()
+	if err != nil {
+		return err
+	}
+
+	for _, ent := range entries {
+		if ent.Name() == newName {
+			return fmt.Errorf("EEXIST")
+		}
+	}
+
+	newBuffer := bytes.NewBuffer([]byte{})
+	buffer, err := d.Buffer()
+	if err != nil {
+		return err
+	}
+
+	for buffer.Len() > 0 {
+		ent := diskimage.DirEnt{}
+		binary.Read(buffer, binary.LittleEndian, &ent)
+
+		if string(bytes.Trim(ent.Name[:], "\x00")) == oldName {
+			byteName := make([]byte, 128)
+			copy(byteName, []byte(newName))
+			copy(ent.Name[:], byteName[:diskimage.DIRSIZ])
+		}
+
+		binary.Write(newBuffer, binary.LittleEndian, &ent)
+	}
+
+	d.Truncate(0)
+	if err != nil {
+		return err
+	}
+
+	return d.Write(newBuffer)
+}
 func (d *Directory) AddFile(name string) (*File, error) {
+	entries, err := d.Entries()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, ent := range entries {
+		if ent.Name() == name {
+			return nil, fmt.Errorf("EEXIST")
+		}
+	}
+
 	inodeNum, err := d.image.AllocInode()
 	if err != nil {
 		return nil, err
 	}
 
 	ent := diskimage.DirEnt{INum: uint16(inodeNum)}
-	copy(ent.Name[:], []byte(name))
+
+	byteName := make([]byte, 128)
+	copy(byteName, []byte(name))
+	copy(ent.Name[:], byteName[:diskimage.DIRSIZ])
 
 	buffer, err := d.Buffer()
 	if err != nil {
@@ -113,7 +164,7 @@ func (d *Directory) Entries() ([]Entry, error) {
 				image:    d.image,
 				inode:    inode,
 				inodeNum: int64(ent.INum),
-				name:     strings.Trim(string(ent.Name[:]), "\x00"),
+				name:     string(bytes.Trim(ent.Name[:], "\x00")),
 			}
 			if inode.Type == diskimage.T_DIR {
 				entries = append(entries, Directory{&f})
