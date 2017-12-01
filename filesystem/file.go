@@ -20,6 +20,9 @@ func (f File) IsDir() bool {
 func (f File) Name() string {
 	return f.name
 }
+func (f File) InodeNum() int64 {
+	return f.inodeNum
+}
 func (f *File) Size() uint64 {
 	return uint64(f.inode.Size)
 }

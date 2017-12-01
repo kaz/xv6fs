@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"strings"
 
 	"bitbucket.org/sekai/xv6fs/filesystem"
@@ -16,8 +17,14 @@ type xv6fs struct {
 }
 
 func Mount(mountPoint string, root *filesystem.Directory) {
-	fs := pathfs.NewPathNodeFs(&xv6fs{pathfs.NewDefaultFileSystem(), root}, nil)
-	server, _, err := nodefs.MountRoot(mountPoint, fs.Root(), nil)
+	pnfs := pathfs.NewPathNodeFs(&xv6fs{pathfs.NewDefaultFileSystem(), root}, nil)
+	conn := nodefs.NewFileSystemConnector(pnfs.Root(), nil)
+	server, err := fuse.NewServer(conn.RawFS(), mountPoint, &fuse.MountOptions{
+		Name:                 "xv6fs",
+		FsName:               "xv6fs",
+		DisableXAttrs:        true,
+		IgnoreSecurityLabels: true,
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -55,6 +62,8 @@ func (x *xv6fs) fetchEntry(name string) filesystem.Entry {
 }
 
 func (x *xv6fs) GetAttr(name string, context *fuse.Context) (*fuse.Attr, fuse.Status) {
+	log.Println(">> GetAttr", name)
+
 	switch entry := x.fetchEntry(name).(type) {
 
 	case filesystem.File:
@@ -74,6 +83,8 @@ func (x *xv6fs) GetAttr(name string, context *fuse.Context) (*fuse.Attr, fuse.St
 	}
 }
 func (x *xv6fs) OpenDir(name string, context *fuse.Context) (c []fuse.DirEntry, code fuse.Status) {
+	log.Println(">> OpenDir", name)
+
 	switch entry := x.fetchEntry(name).(type) {
 
 	case filesystem.File:
@@ -106,6 +117,8 @@ func (x *xv6fs) OpenDir(name string, context *fuse.Context) (c []fuse.DirEntry, 
 	}
 }
 func (x *xv6fs) Open(name string, flags uint32, context *fuse.Context) (file nodefs.File, code fuse.Status) {
+	log.Println(">> Open", name)
+
 	switch entry := x.fetchEntry(name).(type) {
 
 	case filesystem.File:
@@ -144,7 +157,30 @@ func (x *xv6fs) Create(name string, flags uint32, mode uint32, context *fuse.Con
 
 	}
 }
+func (x *xv6fs) Mkdir(name string, mode uint32, context *fuse.Context) fuse.Status {
+	log.Println(">> Mkdir", name)
+
+	fragments := strings.Split(name, "/")
+
+	switch entry := x.fetchEntry(strings.Join(fragments[:len(fragments)-1], "/")).(type) {
+
+	case filesystem.Directory:
+		_, err := entry.AddDirectory(fragments[len(fragments)-1])
+		if err != nil {
+			return fuse.EIO
+		}
+
+		return fuse.OK
+
+	default:
+		return fuse.ENOTDIR
+
+	}
+}
+
 func (x *xv6fs) Unlink(name string, context *fuse.Context) (code fuse.Status) {
+	log.Println(">> Unlink", name)
+
 	switch entry := x.fetchEntry(name).(type) {
 
 	case filesystem.File:
@@ -163,7 +199,40 @@ func (x *xv6fs) Unlink(name string, context *fuse.Context) (code fuse.Status) {
 	switch entry := x.fetchEntry(strings.Join(fragments[:len(fragments)-1], "/")).(type) {
 
 	case filesystem.Directory:
-		err := entry.RemoveEntry(fragments[len(fragments)-1])
+		err := entry.RemoveEntry(fragments[len(fragments)-1], 0)
+		if err != nil {
+			return fuse.EIO
+		}
+
+	default:
+		return fuse.ENOTDIR
+
+	}
+
+	return fuse.OK
+}
+func (x *xv6fs) Rmdir(name string, context *fuse.Context) (code fuse.Status) {
+	log.Println(">> Rmdir", name)
+
+	switch entry := x.fetchEntry(name).(type) {
+
+	case filesystem.Directory:
+		err := entry.Delete()
+		if err != nil {
+			return fuse.EIO
+		}
+
+	default:
+		return fuse.ENOTDIR
+
+	}
+
+	fragments := strings.Split(name, "/")
+
+	switch entry := x.fetchEntry(strings.Join(fragments[:len(fragments)-1], "/")).(type) {
+
+	case filesystem.Directory:
+		err := entry.RemoveEntry(fragments[len(fragments)-1], 1)
 		if err != nil {
 			return fuse.EIO
 		}
@@ -176,12 +245,34 @@ func (x *xv6fs) Unlink(name string, context *fuse.Context) (code fuse.Status) {
 	return fuse.OK
 }
 func (x *xv6fs) Rename(oldName string, newName string, context *fuse.Context) (code fuse.Status) {
+	log.Println(">> Rename", oldName, newName)
+
 	fragments := strings.Split(oldName, "/")
 
 	switch entry := x.fetchEntry(strings.Join(fragments[:len(fragments)-1], "/")).(type) {
 
 	case filesystem.Directory:
 		err := entry.RenameEntry(fragments[len(fragments)-1], newName)
+		if err != nil {
+			return fuse.EIO
+		}
+
+		return fuse.OK
+
+	default:
+		return fuse.ENOTDIR
+
+	}
+}
+func (x *xv6fs) Link(oldName string, newName string, context *fuse.Context) (code fuse.Status) {
+	log.Println(">> Link", oldName, newName)
+
+	fragments := strings.Split(newName, "/")
+
+	switch entry := x.fetchEntry(strings.Join(fragments[:len(fragments)-1], "/")).(type) {
+
+	case filesystem.Directory:
+		err := entry.LinkEntry(fragments[len(fragments)-1], x.fetchEntry(oldName).InodeNum())
 		if err != nil {
 			return fuse.EIO
 		}

@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"log"
+	"fmt"
 
 	"bitbucket.org/sekai/xv6fs/diskimage"
 	"bitbucket.org/sekai/xv6fs/filesystem"
@@ -11,18 +11,19 @@ import (
 func main() {
 	flag.Parse()
 	if len(flag.Args()) < 2 {
-		log.Fatalln("Usage: xv6mount <IMAGE_FILE> <MOUNT_POINT>")
+		fmt.Println("Usage: xv6mount <IMAGE_FILE> <MOUNT_POINT>")
+		return
 	}
 
 	image, err := diskimage.Open(flag.Arg(0))
 	if err != nil {
-		log.Fatalln(err)
+		panic(err)
 	}
 	defer image.Close()
 
 	root, err := filesystem.RootDir(image)
 	if err != nil {
-		log.Fatalln(err)
+		panic(err)
 	}
 
 	Mount(flag.Arg(1), root)

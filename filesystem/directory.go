@@ -27,7 +27,7 @@ func (d Directory) IsDir() bool {
 	return true
 }
 
-func (d *Directory) RemoveEntry(name string) error {
+func (d *Directory) RemoveEntry(name string, linkdec int16) error {
 	newBuffer := bytes.NewBuffer([]byte{})
 	buffer, err := d.Buffer()
 	if err != nil {
@@ -42,6 +42,8 @@ func (d *Directory) RemoveEntry(name string) error {
 			binary.Write(newBuffer, binary.LittleEndian, &ent)
 		}
 	}
+
+	d.inode.Nlink -= linkdec
 
 	d.Truncate(0)
 	if err != nil {
@@ -88,6 +90,30 @@ func (d *Directory) RenameEntry(oldName string, newName string) error {
 
 	return d.Write(newBuffer)
 }
+func (d *Directory) LinkEntry(name string, inodeNum int64) error {
+	ent := diskimage.DirEnt{INum: uint16(inodeNum)}
+
+	byteName := make([]byte, 128)
+	copy(byteName, []byte(name))
+	copy(ent.Name[:], byteName[:diskimage.DIRSIZ])
+
+	buffer, err := d.Buffer()
+	if err != nil {
+		return err
+	}
+
+	binary.Write(buffer, binary.LittleEndian, &ent)
+	if err != nil {
+		return err
+	}
+
+	d.Truncate(0)
+	if err != nil {
+		return err
+	}
+
+	return d.Write(buffer)
+}
 func (d *Directory) AddFile(name string) (*File, error) {
 	entries, err := d.Entries()
 	if err != nil {
@@ -105,28 +131,7 @@ func (d *Directory) AddFile(name string) (*File, error) {
 		return nil, err
 	}
 
-	ent := diskimage.DirEnt{INum: uint16(inodeNum)}
-
-	byteName := make([]byte, 128)
-	copy(byteName, []byte(name))
-	copy(ent.Name[:], byteName[:diskimage.DIRSIZ])
-
-	buffer, err := d.Buffer()
-	if err != nil {
-		return nil, err
-	}
-
-	binary.Write(buffer, binary.LittleEndian, &ent)
-	if err != nil {
-		return nil, err
-	}
-
-	d.Truncate(0)
-	if err != nil {
-		return nil, err
-	}
-
-	d.Write(buffer)
+	err = d.LinkEntry(name, inodeNum)
 	if err != nil {
 		return nil, err
 	}
@@ -140,6 +145,22 @@ func (d *Directory) AddFile(name string) (*File, error) {
 		inodeNum: inodeNum,
 		name:     name,
 	}, nil
+}
+func (d *Directory) AddDirectory(name string) (*Directory, error) {
+	d.inode.Nlink += 1
+
+	file, err := d.AddFile(name)
+	if err != nil {
+		return nil, err
+	}
+
+	file.inode.Type = diskimage.T_DIR
+	dir := &Directory{file}
+
+	dir.LinkEntry("..", d.inodeNum)
+	dir.LinkEntry(".", dir.inodeNum)
+
+	return dir, nil
 }
 
 func (d *Directory) Entries() ([]Entry, error) {

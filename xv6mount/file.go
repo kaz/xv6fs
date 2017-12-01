@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"log"
 
 	"bitbucket.org/sekai/xv6fs/filesystem"
 
@@ -24,6 +25,8 @@ func NewFile(file *filesystem.File) (*xv6file, error) {
 }
 
 func (f *xv6file) Truncate(size uint64) fuse.Status {
+	log.Println(">> Write", f.entity.Name())
+
 	f.buffer.Truncate(int(size))
 	err := f.entity.Truncate(size)
 	if err != nil {
@@ -33,6 +36,8 @@ func (f *xv6file) Truncate(size uint64) fuse.Status {
 	return fuse.OK
 }
 func (f *xv6file) Write(data []byte, off int64) (uint32, fuse.Status) {
+	log.Println(">> Write", f.entity.Name())
+
 	f.buffer.Truncate(int(off))
 	written, err := f.buffer.Write(data)
 	if err != nil {
